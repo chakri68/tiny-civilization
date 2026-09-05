@@ -4,10 +4,63 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>tiny-civilization</title>
+    <meta name="color-scheme" content="dark" />
+    <title>a tiny civilization</title>
+    <!--
+      Critical styles, inline, so the first paint is already black. The real
+      stylesheet is a separate request; without this the page flashes white
+      and shows an unstyled intro before it lands.
+    -->
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #000;
+        color: #ece7da;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        overflow: hidden;
+      }
+      #app {
+        height: 100%;
+        opacity: 0;
+      }
+      .intro {
+        position: fixed;
+        inset: 0;
+        background: #000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        z-index: 40;
+      }
+      .intro-title {
+        color: #ffb000;
+      }
+      .intro-sub {
+        color: #8b8574;
+        font-size: 12px;
+      }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=block"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
-  <body>
+  <body class="booting">
     <div id="app"></div>
+    <div id="intro" class="intro">
+      <div class="intro-title">a tiny civilization</div>
+      <div class="intro-sub">it only runs while you are looking</div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
