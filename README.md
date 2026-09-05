@@ -151,6 +151,51 @@ whole world; everything else in the file is so it can be read without running it
 
 ---
 
+## what you can turn on
+
+The header chips are the only things that change what you see, never what
+happens. `trade` threads the trade network, `names` labels settlements, and
+`alerts` puts events on the map as they happen.
+
+Labels are culled by collision, not by tier: the biggest places get first refusal
+on the space and everything that still fits is drawn. An earlier version hid
+anything below a zoom-dependent tier threshold, which meant that on a young map —
+where every settlement is still a camp — turning labels on did nothing at all.
+
+War shows up on the map whether or not alerts are on: a frontier where a war is
+actually being fought is drawn in warn-orange instead of the two realms' colours,
+so you can see where the trouble is without reading a word. Battles drop a pulsing
+clash marker above the town being fought over. Every skirmish gets a marker; only
+the loud events also get a popup, or a busy war would bury everything else.
+
+## the tech tree
+
+On the stats page, and it follows whatever you have selected — click a settlement
+and it shows that realm's, otherwise the largest realm's.
+
+It is a real dependency graph rather than a list: nodes sit in their era's column
+and are joined to their prerequisites by drawn edges. The edges are hidden until
+you hover a node — a hundred and twenty of them across seventy-four nodes, all at
+once, is a bowl of spaghetti that hides the thing it is meant to explain. Hover
+one and its whole ancestor chain lights up, everything else dims.
+
+Columns are eras rather than graph depth, because "bronze age" means something to
+a reader and "layer 6" does not; the cost is that a few prerequisites sit inside
+their own era, drawn as short hops down the column's left gutter.
+
+A tech tree belongs to a realm, not a city, so the panel says which realm and
+names its towns: the chips along the top pick one (clicking also selects it on the
+map and in the inspector), and the line beneath names its seat and its largest
+settlements.
+
+The state of each node is the useful part. Beyond known / researching / available,
+a tech whose prerequisites are all met but whose **resources are not reachable**
+is flagged in orange, and the caption names what is missing — so when a realm
+stalls for three hundred years you can see that it is a map problem, not a
+research one. Watching a realm sit at "held up for want of tin", with every iron,
+steel and gunpowder tech greyed out behind Bronze Working, explains more about
+that world than any chart.
+
 ## the social card
 
 `public/og-image.jpg` is not an illustration — it is a real world, generated from a

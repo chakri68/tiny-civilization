@@ -12,11 +12,45 @@ const BASE_HEX = 9; // circumradius in px at zoom 1
 const CACHE_SCALE = 2;
 const SQRT3 = 1.7320508075688772;
 
+interface Toast {
+  text: string;
+  tile: number;
+  born: number;
+  severity: number;
+}
+
+const CLASH_LIFE = 14000;
+const MAX_CLASHES = 8;
+const TOAST_LIFE = 7000;
+const TOAST_FADE = 1600;
+const MAX_TOASTS = 4;
+
 interface Range {
   colMin: number;
   colMax: number;
   rowMin: number;
   rowMax: number;
+}
+
+function rankOf(tier: string): number {
+  return tier === 'city' ? 3 : tier === 'town' ? 2 : tier === 'village' ? 1 : 0;
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 export interface Selection {
@@ -50,6 +84,10 @@ export class MapView {
   selection: Selection = { kind: null, id: NONE };
   hoverTile = NONE;
   showTrade = false;
+  showNames = false;
+  showAlerts = false;
+  private toasts: Toast[] = [];
+  private clashes: { tile: number; born: number }[] = [];
 
   onSelect: ((sel: Selection) => void) | null = null;
   onHover: ((tile: number, clientX: number, clientY: number) => void) | null = null;
@@ -177,6 +215,12 @@ export class MapView {
 
     const hues = new Map<number, number>();
     for (const p of w.polities.values()) hues.set(p.id, p.hue);
+    // Frontiers where a war is actually being fought get their own colour, so
+    // you can see where the trouble is without reading a word.
+    const atWar = new Set<number>();
+    for (const war of w.wars.values()) {
+      atWar.add(war.a < war.b ? war.a * 1048576 + war.b : war.b * 1048576 + war.a);
+    }
 
     // Pass 1: terrain, and the owner's wash over it.
     for (let y = rowMin; y <= rowMax; y++) {
@@ -211,9 +255,17 @@ export class MapView {
         if (hue === undefined) continue;
         const a = hexCenter(w.w, i, BASE_HEX);
         const n = neighbors(w.w, w.h, i, buf);
-        ctx.strokeStyle = `hsla(${hue}, 80%, 66%, 0.95)`;
+        const peaceful = `hsla(${hue}, 80%, 66%, 0.95)`;
         for (let k = 0; k < n; k++) {
-          if (w.tiles[buf[k]].owner === owner) continue;
+          const other = w.tiles[buf[k]].owner;
+          if (other === owner) continue;
+          const contested =
+            other !== NONE &&
+            atWar.has(owner < other ? owner * 1048576 + other : other * 1048576 + owner);
+          ctx.strokeStyle = contested ? 'rgba(255, 106, 43, 0.95)' : peaceful;
+          ctx.lineWidth = contested
+            ? Math.max(1, 2.6 / Math.max(1, scale * 0.55))
+            : Math.max(0.6, 1.6 / Math.max(1, scale * 0.55));
           const b = hexCenter(w.w, buf[k], BASE_HEX);
           const dx = b.px - a.px;
           const dy = b.py - a.py;
@@ -353,7 +405,183 @@ export class MapView {
       this.hexPath(ctx, px + off, py + off, BASE_HEX + 1.5 / this.zoom);
       ctx.stroke();
     }
+    if (this.showNames) this.drawLabels(ctx, dpr);
+    this.drawClashes(ctx, dpr);
+    this.drawToasts(ctx, dpr);
     this.lastDrawMs = performance.now() - t0;
+  }
+
+  /**
+   * Settlement names, in screen space, culled by collision rather than by tier.
+   *
+   * The previous version hid anything below a tier threshold that scaled with
+   * zoom, which meant that on a young map — where every settlement is still a
+   * camp — turning labels on did nothing at all. Now the biggest places get
+   * first refusal on the space and everything that still fits is drawn, so the
+   * toggle always does something and never turns into a wall of text.
+   */
+  private drawLabels(ctx: CanvasRenderingContext2D, dpr: number): void {
+    const w = this.world!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const rect = this.canvas.getBoundingClientRect();
+    const size = 11;
+    ctx.font = `500 ${size}px "JetBrains Mono", ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3.5;
+
+    // Biggest first, so when space is tight the important places keep their name.
+    const candidates = Array.from(w.settlements.values())
+      .sort((a, b) => rankOf(b.tier) - rankOf(a.tier) || b.pop - a.pop || a.id - b.id);
+
+    const taken: { x0: number; y0: number; x1: number; y1: number }[] = [];
+    for (const s of candidates) {
+      const c = hexCenter(w.w, s.tile, BASE_HEX);
+      const x = this.panX + (c.px + BASE_HEX) * this.zoom;
+      const y = this.panY + (c.py + BASE_HEX) * this.zoom + BASE_HEX * 0.55 * this.zoom + 2;
+      if (x < -80 || y < -20 || x > rect.width + 80 || y > rect.height + 20) continue;
+
+      const half = ctx.measureText(s.name).width / 2 + 3;
+      const box = { x0: x - half, y0: y - 2, x1: x + half, y1: y + size + 2 };
+      let clash = false;
+      for (const t of taken) {
+        if (box.x0 < t.x1 && box.x1 > t.x0 && box.y0 < t.y1 && box.y1 > t.y0) {
+          clash = true;
+          break;
+        }
+      }
+      if (clash) continue;
+      taken.push(box);
+
+      // A dark stroke under the glyphs, so names stay legible over any terrain.
+      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+      ctx.strokeText(s.name, x, y);
+      ctx.fillStyle = s.tier === 'city' ? '#ffcf5a' : s.tier === 'town' ? '#ece7da' : '#c9c2b2';
+      ctx.fillText(s.name, x, y);
+    }
+  }
+
+  /** Something happened over there. Announced on the map, then forgotten. */
+  pushToast(text: string, tile: number, severity: number): void {
+    if (!this.showAlerts || tile === NONE) return;
+    this.toasts.push({ text, tile, born: performance.now(), severity });
+    while (this.toasts.length > MAX_TOASTS) this.toasts.shift();
+    this.requestFrame();
+  }
+
+  clearToasts(): void {
+    this.toasts.length = 0;
+    this.clashes.length = 0;
+  }
+
+  /** A battle happened here. Marked on the map for a while, then it heals over. */
+  pushClash(tile: number): void {
+    if (!this.showAlerts || tile === NONE) return;
+    this.clashes.push({ tile, born: performance.now() });
+    while (this.clashes.length > MAX_CLASHES) this.clashes.shift();
+    this.requestFrame();
+  }
+
+  /** Crossed blades where the fighting is, pulsing so they read as live. */
+  private drawClashes(ctx: CanvasRenderingContext2D, dpr: number): void {
+    const w = this.world;
+    if (!w || this.clashes.length === 0) return;
+    const now = performance.now();
+    this.clashes = this.clashes.filter((c) => now - c.born < CLASH_LIFE);
+    if (this.clashes.length === 0) return;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const c of this.clashes) {
+      const age = now - c.born;
+      const fade = age > CLASH_LIFE - 3000 ? (CLASH_LIFE - age) / 3000 : 1;
+      const pulse = 0.62 + 0.38 * Math.sin(age / 320);
+      const p = hexCenter(w.w, c.tile, BASE_HEX);
+      const x = this.panX + (p.px + BASE_HEX) * this.zoom;
+      const y = this.panY + (p.py + BASE_HEX) * this.zoom;
+
+      // Sits above the settlement dot rather than on top of it, so you can
+      // still see which town is being fought over.
+      const cy = y - 15;
+      ctx.globalAlpha = fade;
+      ctx.beginPath();
+      ctx.arc(x, cy, 10, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,106,43,0.55)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Outward pulse, so it reads as happening rather than having happened.
+      ctx.globalAlpha = fade * (1 - (pulse - 0.62) / 0.38) * 0.5;
+      ctx.beginPath();
+      ctx.arc(x, cy, 10 + 8 * ((pulse - 0.62) / 0.38), 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.globalAlpha = fade * pulse;
+      ctx.strokeStyle = '#ff6a2b';
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x - 5, cy - 5);
+      ctx.lineTo(x + 5, cy + 5);
+      ctx.moveTo(x + 5, cy - 5);
+      ctx.lineTo(x - 5, cy + 5);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    this.requestFrame();
+  }
+
+  private drawToasts(ctx: CanvasRenderingContext2D, dpr: number): void {
+    const w = this.world;
+    if (!w || this.toasts.length === 0) return;
+    const now = performance.now();
+    this.toasts = this.toasts.filter((t) => now - t.born < TOAST_LIFE);
+    if (this.toasts.length === 0) return;
+
+    // Screen space, so the boxes are a fixed size no matter the zoom.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = '400 11px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    const rect = this.canvas.getBoundingClientRect();
+    const placed: { x: number; y: number; t: Toast }[] = [];
+    for (const t of this.toasts) {
+      const c = hexCenter(w.w, t.tile, BASE_HEX);
+      placed.push({
+        x: this.panX + (c.px + BASE_HEX) * this.zoom,
+        y: this.panY + (c.py + BASE_HEX) * this.zoom,
+        t,
+      });
+    }
+    // Nudge apart anything that would overlap, oldest keeps its spot.
+    placed.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < placed.length; i++) {
+      if (placed[i].y - placed[i - 1].y < 26) placed[i].y = placed[i - 1].y + 26;
+    }
+
+    for (const { x, y, t } of placed) {
+      const age = now - t.born;
+      const alpha = age > TOAST_LIFE - TOAST_FADE ? (TOAST_LIFE - age) / TOAST_FADE : 1;
+      const width = ctx.measureText(t.text).width + 18;
+      const bx = Math.max(6, Math.min(x + 10, rect.width - width - 6));
+      const by = Math.max(14, Math.min(y - 10, rect.height - 26));
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = 'rgba(2,2,2,0.9)';
+      roundRect(ctx, bx, by, width, 21, 5);
+      ctx.fill();
+      ctx.strokeStyle = t.severity >= 3 ? 'rgba(255,176,0,0.85)' : 'rgba(139,133,116,0.7)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = t.severity >= 3 ? '#ffcf5a' : '#ece7da';
+      ctx.fillText(t.text, bx + 9, by + 11);
+      ctx.globalAlpha = 1;
+    }
+    // Keep animating while any are still on screen.
+    this.requestFrame();
   }
 
   private selectionTile(): number {

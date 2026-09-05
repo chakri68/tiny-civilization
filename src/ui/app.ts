@@ -8,6 +8,7 @@ import { SimClock, SPEEDS, type Speed } from './../loop.ts';
 import { listWorlds, loadWorld, saveWorld, type WorldMeta } from './../persist/db.ts';
 import { downloadFossil } from './../fossil.ts';
 import { MapView, type Selection } from './map.ts';
+import { focusPolity } from './techtree.ts';
 import { ChroniclePane } from './chronicle.ts';
 import { Inspector } from './inspector.ts';
 import { StatsPage } from './stats.ts';
@@ -22,6 +23,8 @@ const SHELL = `
     <div class="spacer"></div>
     <div class="controls">
       <button class="chip" data-act="trade">trade</button>
+      <button class="chip" data-act="names">names</button>
+      <button class="chip" data-act="alerts">alerts</button>
       <span class="speeds"></span>
       <button class="btn" data-act="pause">resume</button>
       <button class="btn" data-act="stats">stats</button>
@@ -60,6 +63,7 @@ export class App {
   private stats: StatsPage;
   private clock: SimClock;
   private lastSaveTick = 0;
+  private lastToastId = 0;
   private tip: HTMLElement;
   private modalBack: HTMLElement;
   private modal: HTMLElement;
@@ -76,6 +80,10 @@ export class App {
       root.querySelector<HTMLElement>('[data-panel="inspector"] .panel-body')!,
     );
     this.stats = new StatsPage(root.querySelector<HTMLElement>('.stats')!);
+    this.stats.onPickRealm = (id) => {
+      this.map.select({ kind: 'polity', id });
+      if (this.world) this.stats.render(this.world, id);
+    };
     this.tip = root.querySelector<HTMLElement>('.tip')!;
     this.modalBack = root.querySelector<HTMLElement>('.modal-back')!;
     this.modal = root.querySelector<HTMLElement>('.modal')!;
@@ -126,6 +134,10 @@ export class App {
     this.world = w;
     this.clock.pause();
     this.lastSaveTick = w.tick;
+    // Start from the present: opening a saved world should not replay a
+    // thousand years of headlines at you.
+    this.lastToastId = w.nextEventId;
+    this.map.clearToasts();
     this.chronicle.reset();
     this.map.setWorld(w);
     this.map.resize();
@@ -148,9 +160,40 @@ export class App {
     const w = this.world;
     if (!w) return;
     tick(w);
+    this.pumpToasts();
     this.map.invalidate();
     this.paint();
     if (w.tick - this.lastSaveTick >= PERSIST_INTERVAL) void this.persist();
+  }
+
+  /** Feed anything newsworthy since the last tick to the map as a popup. */
+  private pumpToasts(): void {
+    const w = this.world;
+    if (!w) return;
+    const fresh = [];
+    for (let i = w.chronicle.length - 1; i >= 0; i--) {
+      const e = w.chronicle[i];
+      if (e.id <= this.lastToastId) break;
+      // Battles are usually severity 1 — routine by the chronicle's standards,
+      // but they are the thing you want to see happening on the map.
+      if (e.tile !== NONE && (e.severity >= 2 || e.kind === 'battle')) fresh.push(e);
+    }
+    this.lastToastId = w.nextEventId - 1;
+    if (!this.map.showAlerts) return;
+    for (const e of fresh.reverse()) {
+      // Fighting is marked on the map every time; only the loud events also get
+      // a popup, or a busy war would bury everything else under skirmishes.
+      if (e.kind === 'battle' || e.kind === 'sack' || e.kind === 'war') this.map.pushClash(e.tile);
+      if (e.severity < 2) continue;
+      const text = e.text.length > 74 ? `${e.text.slice(0, 72)}…` : e.text;
+      this.map.pushToast(text, e.tile, e.severity);
+    }
+  }
+
+  private focus(): number {
+    const w = this.world;
+    if (!w) return -1;
+    return focusPolity(w, this.map.selection.kind, this.map.selection.id);
   }
 
   private paint(): void {
@@ -168,7 +211,7 @@ export class App {
     document.title = `Year ${yearOf(w.tick).toLocaleString()} · ${pop.toLocaleString()} · ${w.name}`;
     this.chronicle.update(w);
     this.inspector.render(w, this.map.selection);
-    this.stats.render(w);
+    this.stats.render(w, this.focus());
   }
 
   private async persist(force = false): Promise<void> {
@@ -216,8 +259,19 @@ export class App {
         (e.target as HTMLElement).classList.toggle('on', this.map.showTrade);
         this.map.invalidate();
       }
+      if (act === 'names') {
+        this.map.showNames = !this.map.showNames;
+        (e.target as HTMLElement).classList.toggle('on', this.map.showNames);
+        this.map.requestFrame();
+      }
+      if (act === 'alerts') {
+        this.map.showAlerts = !this.map.showAlerts;
+        (e.target as HTMLElement).classList.toggle('on', this.map.showAlerts);
+        if (!this.map.showAlerts) this.map.clearToasts();
+        this.map.requestFrame();
+      }
       if (act === 'stats') {
-        const on = this.stats.toggle(this.world);
+        const on = this.stats.toggle(this.world, this.focus());
         (e.target as HTMLElement).classList.toggle('on', on);
       }
       if (act === 'export' && this.world) downloadFossil(this.world);
@@ -228,7 +282,12 @@ export class App {
       head.addEventListener('click', () => head.parentElement!.classList.toggle('collapsed'));
     }
 
-    this.map.onSelect = (sel) => this.inspector.render(this.world, sel);
+    this.map.onSelect = (sel) => {
+      this.inspector.render(this.world, sel);
+      // The tech panel follows whatever you are looking at.
+      if (this.world) this.stats.render(this.world, this.focus());
+      void sel;
+    };
     this.map.onHover = (tile, x, y) => this.showTip(tile, x, y);
     this.inspector.onSelect = (sel: Selection) => {
       this.map.select(sel);
@@ -259,7 +318,7 @@ export class App {
 
     window.addEventListener('resize', () => {
       this.map.resize();
-      this.stats.render(this.world!);
+      if (this.world) this.stats.render(this.world, this.focus());
     });
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && !(e.target instanceof HTMLInputElement)) {

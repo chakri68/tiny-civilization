@@ -1,5 +1,6 @@
 import type { World } from './../sim/types.ts';
 import { yearOf } from './../sim/chronicle.ts';
+import { TechTree } from './techtree.ts';
 
 interface Series {
   key: keyof World['stats'];
@@ -22,9 +23,18 @@ const SERIES: Series[] = [
 export class StatsPage {
   private el: HTMLElement;
   private canvases = new Map<string, HTMLCanvasElement>();
+  private tech: TechTree;
+  /** Forwarded from the tech panel's realm picker. */
+  onPickRealm: ((polityId: number) => void) | null = null;
 
   constructor(el: HTMLElement) {
     this.el = el;
+
+    const techBox = document.createElement('div');
+    this.tech = new TechTree(techBox);
+    this.tech.onPick = (id) => this.onPickRealm?.(id);
+    el.appendChild(techBox);
+
     for (const s of SERIES) {
       const box = document.createElement('div');
       box.className = 'chartbox';
@@ -41,14 +51,15 @@ export class StatsPage {
     return this.el.classList.contains('show');
   }
 
-  toggle(w: World | null): boolean {
+  toggle(w: World | null, focus = -1): boolean {
     this.el.classList.toggle('show');
-    if (this.visible && w) this.render(w);
+    if (this.visible && w) this.render(w, focus);
     return this.visible;
   }
 
-  render(w: World): void {
+  render(w: World, focus = -1): void {
     if (!this.visible) return;
+    this.tech.render(w, focus);
     for (const s of SERIES) this.chart(this.canvases.get(s.key)!, w.stats.tick, w.stats[s.key]);
   }
 
