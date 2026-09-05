@@ -342,7 +342,7 @@ export class App {
 
   private showStartScreen(saved: WorldMeta[]): void {
     this.openModal(`
-      <h3>a tiny civilization</h3>
+      <h2>a tiny civilization</h2>
       <p>Worlds already on this machine. They have not moved since you closed the tab.</p>
       <div class="worlds">
         ${saved
@@ -368,7 +368,7 @@ export class App {
   private showResumeBanner(): void {
     const w = this.world!;
     this.openModal(`
-      <h3>you were away</h3>
+      <h2>you were away</h2>
       <p>${yearOf(w.tick).toLocaleString()} years passed while you watched. Nothing happened while you were gone.</p>
       <div class="actions">
         <button class="btn primary" data-modal="resume">resume</button>
@@ -386,7 +386,7 @@ export class App {
   private showNewWorld(confirmFirst: boolean): void {
     if (confirmFirst && this.world) {
       this.openModal(`
-        <h3>abandon this world?</h3>
+        <h2>abandon this world?</h2>
         <p>${this.world.name} has ${yearOf(this.world.tick).toLocaleString()} years of history. Starting a new one leaves it where it is; you can open it again from the start screen.</p>
         <div class="actions">
           <button class="btn" data-modal="cancel">keep watching</button>
@@ -399,10 +399,16 @@ export class App {
 
     const seed = (Math.random() * 0xffffffff) >>> 0;
     this.openModal(`
-      <h3>a new world</h3>
+      <h2>a new world</h2>
       <p>Naming it is the only thing you will ever get to decide. After this you can only watch.</p>
-      <div class="row"><input type="text" id="nw-name" placeholder="name of the world" value="" maxlength="40" /></div>
-      <div class="row"><input type="number" id="nw-seed" value="${seed}" /></div>
+      <div class="row">
+        <label class="field-label" for="nw-name">name</label>
+        <input type="text" id="nw-name" placeholder="name of the world" value="" maxlength="40" />
+      </div>
+      <div class="row">
+        <label class="field-label" for="nw-seed">seed</label>
+        <input type="number" id="nw-seed" value="${seed}" />
+      </div>
       <div class="actions">
         ${this.world ? '<button class="btn" data-modal="cancel">cancel</button>' : ''}
         <button class="btn primary" data-modal="create">begin</button>

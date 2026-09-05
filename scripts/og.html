@@ -1,0 +1,140 @@
+<!doctype html>
+<!--
+  Generator for the social card and the app icons. Not part of the build —
+  Vite only bundles index.html, so this is served in dev and screenshotted.
+
+    npm run dev
+    open /scripts/og.html            -> 1200x630 social card
+    open /scripts/og.html?mode=icon  -> square app icon
+
+  The map on the card is a real world, generated and run from a fixed seed, so
+  the picture is the actual thing rather than an illustration of it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;500&display=block"
+      rel="stylesheet"
+    />
+    <style>
+      html, body { margin: 0; background: #000; }
+      #card {
+        position: relative;
+        overflow: hidden;
+        background: #05070c;
+        width: 1200px;
+        height: 630px;
+      }
+      body.icon #card { width: 512px; height: 512px; }
+      canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .veil {
+        position: absolute; inset: 0;
+        background:
+          linear-gradient(
+            100deg,
+            rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.96) 42%,
+            rgba(0,0,0,0.78) 56%, rgba(0,0,0,0.3) 74%, rgba(0,0,0,0.55) 100%
+          ),
+          radial-gradient(120% 90% at 50% 50%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.7) 100%);
+      }
+      .copy { position: absolute; left: 68px; top: 132px; width: 620px; }
+      h1 {
+        font-family: "Press Start 2P", monospace;
+        font-size: 40px; line-height: 1.5; letter-spacing: -0.5px;
+        color: #ffb000; text-shadow: 0 0 30px rgba(255,176,0,0.55);
+        margin: 0 0 26px;
+      }
+      .tag {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 21px; line-height: 1.6; color: #ece7da; margin: 0 0 26px;
+      }
+      .lines {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 14px; line-height: 1.75; color: #8b8574;
+        border-left: 2px solid rgba(255,176,0,0.5); padding-left: 14px;
+      }
+      .foot {
+        position: absolute; left: 68px; bottom: 54px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 14px; color: #8b8574; letter-spacing: 0.08em; text-transform: uppercase;
+      }
+      /* Icon mode: the same hex the favicon uses, at poster size. */
+      .icon-art { position: absolute; inset: 0; display: none; background: #000; }
+      body.icon .icon-art { display: block; }
+      body.icon .veil, body.icon .copy, body.icon .foot, body.icon canvas { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="card" role="img" aria-label="a tiny civilization social card">
+      <canvas id="map"></canvas>
+      <div class="veil"></div>
+      <div class="copy">
+        <h1>a tiny<br />civilization</h1>
+        <p class="tag">A world that only runs while your tab is open.<br />You can't intervene. You can only watch.</p>
+        <div class="lines" id="lines"></div>
+      </div>
+      <div class="foot" id="foot"></div>
+      <svg class="icon-art" viewBox="0 0 64 64">
+        <rect width="64" height="64" fill="#000000" />
+        <path d="M32 7 L54.5 20 L54.5 44 L32 57 L9.5 44 L9.5 20 Z" fill="#ffb000" />
+        <circle cx="32" cy="32" r="6.5" fill="#000000" />
+      </svg>
+    </div>
+
+    <script type="module">
+      import { createWorld, totalPop } from '/src/sim/world.ts';
+      import { runTicks } from '/src/sim/tick.ts';
+      import { MapView } from '/src/ui/map.ts';
+
+      const params = new URLSearchParams(location.search);
+
+      // Kicked off without awaiting: a top-level await would hold back the load
+      // event, and simulating twenty thousand months takes ten-odd seconds.
+      // The screenshotter polls document.body.dataset.ready instead.
+      void (async () => {
+        if (params.get('mode') === 'icon') {
+          document.body.classList.add('icon');
+          document.body.dataset.ready = '1';
+          return;
+        }
+
+        await new Promise((r) => setTimeout(r, 0));
+        const seed = Number(params.get('seed') ?? 4242);
+        const ticks = Number(params.get('ticks') ?? 20000);
+
+        const world = createWorld(seed, 'Hearth');
+        runTicks(world, ticks);
+
+        const canvas = document.getElementById('map');
+        const view = new MapView(canvas);
+        view.resize();
+        view.setWorld(world);
+        // Push the map right, so the copy sits over open water rather than over
+        // the continent, and crop in a little for detail.
+        view.zoom *= 1.5;
+        view.panX = 1200 * 0.72 - (view.worldPx.w / 2) * view.zoom;
+        view.panY = 630 * 0.5 - (view.worldPx.h / 2) * view.zoom;
+        view.requestFrame();
+
+        const notable = world.chronicle
+          .filter((e) => e.severity === 3)
+          .slice(-2)
+          .map((e) => e.text);
+        document.getElementById('lines').innerHTML =
+          notable.map((t) => `<div>${t}</div>`).join('') ||
+          '<div>Year 1. A band came to the water.</div>';
+
+        const year = Math.floor(world.tick / 12) + 1;
+        document.getElementById('foot').textContent =
+          `year ${year.toLocaleString()} · ${totalPop(world).toLocaleString()} people · ${world.polities.size} realms · ${world.settlements.size} settlements`;
+
+        await document.fonts.ready;
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        document.body.dataset.ready = '1';
+      })();
+    </script>
+  </body>
+</html>

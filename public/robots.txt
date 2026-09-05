@@ -1,0 +1,5 @@
+# Update the Sitemap line when you set your real domain in index.html.
+User-agent: *
+Allow: /
+
+Sitemap: https://tiny-civilization.example.com/sitemap.xml

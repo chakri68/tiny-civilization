@@ -12,7 +12,13 @@ npm install
 npm run dev
 ```
 
-Vanilla TypeScript, Canvas 2D, IndexedDB. Zero runtime dependencies, ~30 KB gzipped.
+Vanilla TypeScript, Canvas 2D, IndexedDB. Zero runtime dependencies, ~31 KB gzipped.
+
+**Before you deploy:** every absolute URL is a placeholder domain
+(`tiny-civilization.example.com`). Set the real one in `index.html` — canonical,
+`og:url`, `og:image`, `twitter:image` and the JSON-LD block all repeat it — and in
+`public/robots.txt`, `public/sitemap.xml` and `public/llms.txt`. Social previews need
+absolute URLs, so relative paths will not do.
 
 ---
 
@@ -144,6 +150,26 @@ Because the sim is deterministic the seed and tick count alone would regenerate 
 whole world; everything else in the file is so it can be read without running it.
 
 ---
+
+## the social card
+
+`public/og-image.jpg` is not an illustration — it is a real world, generated from a
+fixed seed, run twenty thousand months, and rendered by the same `MapView` the app
+uses. The two chronicle lines on it are whatever that world actually did.
+
+```
+npm run dev
+# then screenshot the #card element on these:
+#   /scripts/og.html              1200x630 social card
+#   /scripts/og.html?mode=icon    square app icon
+```
+
+`scripts/og.html` is served in dev but never bundled — Vite only builds `index.html`.
+Icons (`favicon.svg`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`) are one
+hexagon with a settlement on it, which is the smallest true picture of the thing.
+
+Lighthouse on the production build: **100 SEO, 100 accessibility, 100 best practices,
+100 agentic browsing**, no failed audits.
 
 ## tuning
 

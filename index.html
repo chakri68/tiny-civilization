@@ -2,10 +2,83 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
-    <title>a tiny civilization</title>
+    <meta name="theme-color" content="#000000" />
+
+    <!--
+      ┌─────────────────────────────────────────────────────────────────────┐
+      │  SET YOUR DOMAIN HERE.                                              │
+      │  Every absolute URL below repeats it: canonical, og:url, og:image,  │
+      │  twitter:image, and the JSON-LD block. Crawlers and social previews │
+      │  need absolute URLs, so relative paths will not do. Also update     │
+      │  public/robots.txt and public/sitemap.xml.                          │
+      └─────────────────────────────────────────────────────────────────────┘
+    -->
+    <link rel="canonical" href="https://tiny-civilization.example.com/" />
+
+    <title>a tiny civilization — a world that runs only while your tab is open</title>
+    <meta
+      name="description"
+      content="A civilization simulator that lives in one browser tab. People settle, trade, invent, find religion and go to war. Time only passes while you are watching."
+    />
+    <meta name="author" content="chakri68" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="a tiny civilization" />
+    <meta property="og:title" content="a tiny civilization" />
+    <meta
+      property="og:description"
+      content="A civilization simulator that lives in one browser tab. People settle, trade, invent, find religion and go to war. Time only passes while you are watching."
+    />
+    <meta property="og:url" content="https://tiny-civilization.example.com/" />
+    <meta property="og:image" content="https://tiny-civilization.example.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1444" />
+    <meta property="og:image:height" content="758" />
+    <meta
+      property="og:image:alt"
+      content="A hex map of a generated world, with realm borders and roads, beside the title 'a tiny civilization'."
+    />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="a tiny civilization" />
+    <meta
+      name="twitter:description"
+      content="A civilization simulator that lives in one browser tab. People settle, trade, invent, find religion and go to war. Time only passes while you are watching."
+    />
+    <meta name="twitter:image" content="https://tiny-civilization.example.com/og-image.jpg" />
+    <meta
+      name="twitter:image:alt"
+      content="A hex map of a generated world, with realm borders and roads, beside the title 'a tiny civilization'."
+    />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "a tiny civilization",
+        "url": "https://tiny-civilization.example.com/",
+        "description": "A civilization simulator that lives in one browser tab. People settle, trade, invent, find religion and go to war. Time only passes while you are watching.",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any modern browser",
+        "browserRequirements": "Requires JavaScript and Canvas 2D",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "image": "https://tiny-civilization.example.com/og-image.jpg"
+      }
+    </script>
+
     <!--
       Critical styles, inline, so the first paint is already black. The real
       stylesheet is a separate request; without this the page flashes white
@@ -57,6 +130,23 @@
   </head>
   <body class="booting">
     <div id="app"></div>
+    <noscript>
+      <div style="max-width: 40rem; margin: 12vh auto; padding: 0 1.5rem; line-height: 1.7">
+        <h1 style="color: #ffb000">a tiny civilization</h1>
+        <p>
+          A browser tab that hosts a civilization. It simulates only while the tab is open.
+          People are born, settle, farm, trade, invent, form factions, fight, build roads,
+          find religion and science. You cannot intervene — you can only watch, read the
+          chronicle, and eventually export the whole thing as a small JSON fossil.
+        </p>
+        <p>
+          The simulation is deterministic: one seeded PRNG and a fixed timestep, so the same
+          seed and the same number of ticks give the same world, bit for bit. Time passes only
+          while the tab exists; close it and the world freezes exactly where it stood.
+        </p>
+        <p><strong>It needs JavaScript to run.</strong></p>
+      </div>
+    </noscript>
     <div id="intro" class="intro">
       <div class="intro-title">a tiny civilization</div>
       <div class="intro-sub">it only runs while you are looking</div>

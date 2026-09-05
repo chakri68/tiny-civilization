@@ -1,0 +1,16 @@
+# a tiny civilization
+
+> A civilization simulator that lives in one browser tab. People settle, trade, invent, find religion and go to war. The simulation is deterministic — one seeded PRNG and a fixed timestep — and time passes only while the tab is open. There is no server and nothing to log into.
+
+The whole app is a single client-side page rendering to a canvas, so there are no other URLs to crawl. What follows is what the thing actually is.
+
+- One tick is one simulated month, run through eleven ordered phases: food and growth, migration, trade, roads, technology, religion, politics, war, disasters, landscape, and the chronicle.
+- Roads are emergent — a trade route that keeps trading gets paved, and plague then travels along it.
+- Culture is six floats (martial, mercantile, spiritual, scholarly, communal, expansionist) that drift and converge, and drive almost everything qualitative. A religion's tenets pull on the culture of everyone who keeps it.
+- You cannot intervene. The only inputs are pan, zoom, select, pause, speed, export and starting a new world.
+- A world can be exported as a "fossil": a small JSON file holding the seed, the tick count, era summaries, the recent chronicle and a one-pixel-per-hex map. Because the sim is deterministic, the seed and tick count alone regenerate the world.
+
+## Links
+
+- [The app](https://tiny-civilization.example.com/): the simulator itself
+- [Source and design notes](https://github.com/chakri68/tiny-civilization): the README covers the tick pipeline, the determinism guarantees and where the implementation departs from its spec

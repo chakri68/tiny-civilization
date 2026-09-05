@@ -79,7 +79,7 @@ export class Inspector {
     if (s.unrest > 0.3) troubles.push('unrest');
 
     this.el.innerHTML = `
-      <h3>${s.name}</h3>
+      <h2>${s.name}</h2>
       <div class="kv">
         <span>people</span><span>${num(s.pop)}</span>
         <span>rank</span><span>${s.tier}</span>
@@ -151,7 +151,7 @@ export class Inspector {
       .slice(0, 12);
 
     this.el.innerHTML = `
-      <h3 style="color:hsl(${p.hue},65%,62%);text-shadow:0 0 10px hsla(${p.hue},65%,62%,0.4)">${p.name}</h3>
+      <h2 style="color:hsl(${p.hue},65%,62%);text-shadow:0 0 10px hsla(${p.hue},65%,62%,0.4)">${p.name}</h2>
       <div class="kv">
         <span>government</span><span>${p.gov}</span>
         <span>people</span><span>${num(polityPop(w, p))}</span>
@@ -221,7 +221,7 @@ export class Inspector {
       .map((eid) => w.chronicle.find((e) => e.id === eid))
       .filter((e): e is NonNullable<typeof e> => !!e);
     this.el.innerHTML = `
-      <h3>${n.name}</h3>
+      <h2>${n.name}</h2>
       <div class="kv">
         <span>known as</span><span>${n.role}</span>
         <span>realm</span><span>${
@@ -252,7 +252,7 @@ export class Inspector {
     const parent = w.religions.get(r.parent);
     const followers = Array.from(w.settlements.values()).filter((s) => s.religion === r.id);
     this.el.innerHTML = `
-      <h3>${r.name}</h3>
+      <h2>${r.name}</h2>
       <div class="kv">
         <span>founded</span><span>year ${yearOf(r.founded)}</span>
         <span>first preached</span><span>${
@@ -293,7 +293,7 @@ export class Inspector {
     const t = w.tiles[id];
     if (!t) return;
     this.el.innerHTML = `
-      <h3>${BIOME[t.biome].label}</h3>
+      <h2>${BIOME[t.biome].label}</h2>
       <div class="kv">
         <span>fertility</span><span>${(t.fertility * 100).toFixed(0)}%</span>
         <span>moisture</span><span>${(t.moisture * 100).toFixed(0)}%</span>
