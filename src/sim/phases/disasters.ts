@@ -2,7 +2,7 @@ import type { Settlement, World } from './../types.ts';
 import { chance, hashUnit, randInt, range } from './../rng.ts';
 import { hexDistance } from './../hex.ts';
 import { emit } from './../chronicle.ts';
-import { capacityOf, effectsOf, settlementList } from './../query.ts';
+import { capacityOf, effectsAt, settlementList } from './../query.ts';
 import {
   BEAST_CHANCE,
   SICKNESS_CHANCE,
@@ -29,7 +29,7 @@ export function phaseDisasters(w: World): void {
   const list = settlementList(w);
 
   for (const s of list) {
-    const fx = effectsOf(w, s.polity);
+    const fx = effectsAt(w, s);
     const health = fx.health;
 
     if (s.plague > 0) {
@@ -145,7 +145,7 @@ function beasts(w: World, list: Settlement[]): void {
     if (s.tier !== 'camp' && s.tier !== 'village') continue;
     const flavour = PREDATORS[w.tiles[s.tile].biome];
     if (!flavour) continue;
-    const fx = effectsOf(w, s.polity);
+    const fx = effectsAt(w, s);
     const isolation = 1 / (1 + s.partners.length * 0.6);
     if (!chance(w.rng, (BEAST_CHANCE * isolation) / fx.mil)) continue;
     const dead = Math.max(1, s.pop * range(w.rng, 0.008, 0.03));
@@ -157,7 +157,7 @@ function beasts(w: World, list: Settlement[]): void {
       s.tier === 'village' ? 1 : 0,
       [s.id],
       s.tile,
-      `${cap(flavour[0])} ${flavour[1]} at ${s.name}. ${Math.round(dead)} did not come back.`,
+      `${cap(flavour[0])} ${flavour[1]} at ${s.name}. ${Math.round(dead)} of the ${s.tier} did not come back.`,
     );
   }
 }
@@ -169,7 +169,7 @@ function beasts(w: World, list: Settlement[]): void {
 function sickness(w: World, list: Settlement[]): void {
   for (const s of list) {
     if (s.plague > 0) continue;
-    const fx = effectsOf(w, s.polity);
+    const fx = effectsAt(w, s);
     const t = w.tiles[s.tile];
     const crowding = Math.max(0, s.pop / capacityOf(w, s, fx) - 0.55);
     const damp = t.biome === 'wetland' ? 1.8 : t.river ? 1.3 : 1;

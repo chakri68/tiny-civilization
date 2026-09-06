@@ -2,6 +2,7 @@ import type { Settlement, World } from './../types.ts';
 import { NONE } from './../types.ts';
 import { chance } from './../rng.ts';
 import { converge, CULT, cultureDistance, perturb } from './../culture.ts';
+import { landmassOf } from './../path.ts';
 import { emit, nName, rName } from './../chronicle.ts';
 import { polityList, settlementList } from './../query.ts';
 import { createNotable, createReligion, sortedIds } from './../factory.ts';
@@ -9,6 +10,7 @@ import {
   CONVERSION_COOLDOWN,
   CONVERSION_MARGIN,
   CONVERSION_RATE,
+  CULTURE_OVERSEAS,
   PROPHET_CHANCE,
   PROPHET_MIN_POP,
   FAITH_PULL,
@@ -69,6 +71,7 @@ export function phaseReligion(w: World): void {
   // Rolled once a year, with a cooldown. Without both, two neighbouring faiths
   // will trade a town back and forth every month and fill the chronicle with it.
   if (w.tick % TICKS_PER_YEAR === 3) {
+    const mass = landmassOf(w);
     for (const s of list) {
       if (s.religion === NONE) continue;
       const faith = w.religions.get(s.religion);
@@ -90,8 +93,11 @@ export function phaseReligion(w: World): void {
         if (affinity - incumbent < CONVERSION_MARGIN) continue;
 
         const weight = Math.min(2.5, Math.sqrt(s.pop / Math.max(60, o.pop)));
+        // A faith carried in by sea arrives with the traders and stays at the
+        // harbour. It takes far longer to reach the people who live inland.
+        const reach = mass[o.tile] === mass[s.tile] ? 1 : CULTURE_OVERSEAS;
         const pressure =
-          CONVERSION_RATE * weight * (affinity - incumbent) * (1 + o.culture[CULT.spiritual]);
+          CONVERSION_RATE * weight * reach * (affinity - incumbent) * (1 + o.culture[CULT.spiritual]);
         if (!chance(w.rng, pressure)) continue;
 
         const from = o.religion;

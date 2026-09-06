@@ -1,10 +1,12 @@
-import type { World } from './../sim/types.ts';
+import type { Settlement, World } from './../sim/types.ts';
 import { CULTURE_AXES, NONE, RESOURCES } from './../sim/types.ts';
 import type { Selection } from './map.ts';
 import { BIOME, RESOURCE } from './../sim/biomes.ts';
 import { yearOf } from './../sim/chronicle.ts';
 import { describeCulture } from './../sim/culture.ts';
 import { effectsOf, polityPop, religiousUnity } from './../sim/query.ts';
+import { warKey } from './../sim/factory.ts';
+import { TICKS_PER_YEAR } from './../sim/constants.ts';
 import { eraOf, ERAS, TECH_BY_ID } from './../sim/tech.ts';
 
 const num = (n: number) => Math.round(n).toLocaleString();
@@ -62,6 +64,40 @@ export class Inspector {
     ).join('')}</div>`;
   }
 
+  /**
+   * What this place knows, against what its realm has on the books. They come
+   * apart when a town is cut off from the trade network, or when it was taken
+   * from someone who knew things its new owners do not.
+   */
+  private craft(w: World, s: Settlement): string {
+    const ledger = w.techs.get(s.polity) ?? new Set<string>();
+    const missing = Array.from(ledger)
+      .filter((t) => !s.techs.has(t))
+      .map((t) => TECH_BY_ID.get(t)?.name ?? t)
+      .sort();
+    const extra = Array.from(s.techs)
+      .filter((t) => !ledger.has(t))
+      .map((t) => TECH_BY_ID.get(t)?.name ?? t)
+      .sort();
+    const era = ERAS[eraOf(s.techs)];
+    let out = `<div class="sub">craft — ${s.techs.size} known, ${era} age</div>`;
+    if (!missing.length && !extra.length) {
+      return out + `<div class="tags"><span class="tag">everything the realm has</span></div>`;
+    }
+    if (missing.length) {
+      out += `<div class="tags">${missing
+        .map((n) => `<span class="tag">no ${n.toLowerCase()}</span>`)
+        .join('')}</div>`;
+    }
+    if (extra.length) {
+      // Craft the court never recorded — almost always spoils of a sack.
+      out += `<div class="sub">theirs, not the realm's</div><div class="tags">${extra
+        .map((n) => `<span class="tag">${n}</span>`)
+        .join('')}</div>`;
+    }
+    return out;
+  }
+
   private settlement(w: World, id: number): void {
     const s = w.settlements.get(id);
     if (!s) {
@@ -100,6 +136,23 @@ export class Inspector {
         <span>wealth</span><span>${num(s.wealth)}</span>
       </div>
       ${troubles.length ? `<div class="notice">${troubles.join(' · ')}</div>` : ''}
+      ${
+        p && p.wars.size
+          ? `<div class="sub">at war with</div><div class="tags">${Array.from(p.wars)
+              .map((eid) => {
+                const o = w.polities.get(eid);
+                if (!o) return '';
+                // A settlement fights its realm's wars, so the length is the
+                // useful part — a border town cares how long this has been going on.
+                const war = w.wars.get(warKey(p.id, eid));
+                const years = war ? Math.floor((w.tick - war.since) / TICKS_PER_YEAR) : 0;
+                const age = years >= 1 ? `${years}y` : 'new';
+                return `<span class="tag link" data-kind="polity" data-id="${o.id}">${o.name} · ${age}</span>`;
+              })
+              .join('')}</div>`
+          : ''
+      }
+      ${this.craft(w, s)}
       <div class="sub">culture</div>
       ${this.cultureBars(s.culture)}
       <div class="sub">on the ground</div>

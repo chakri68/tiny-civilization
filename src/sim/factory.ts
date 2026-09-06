@@ -93,6 +93,8 @@ export function createSettlement(
   tile: number,
   polityId: Id,
   pop: number,
+  /** The place the founders walked out of. They bring its crafts with them. */
+  from?: Settlement,
 ): Settlement {
   const id = newId(w);
   const p = w.polities.get(polityId)!;
@@ -126,6 +128,7 @@ export function createSettlement(
     partnerDist: [],
     partnersTick: -9999,
     noRoomUntil: -9999,
+    techs: new Set(from ? from.techs : []),
   };
   w.settlements.set(id, s);
   p.settlements.add(id);

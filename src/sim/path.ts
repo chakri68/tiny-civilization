@@ -1,4 +1,5 @@
 import type { World } from './types.ts';
+import type { Effects } from './tech.ts';
 import { BIOME } from './biomes.ts';
 import { neighbors, edgeKey } from './hex.ts';
 
@@ -55,14 +56,54 @@ class Heap {
   }
 }
 
-export function moveCost(w: World, tile: number, road: boolean): number {
+/**
+ * `fx` is whoever is doing the moving. Without it the frontier is a person on
+ * foot who has never seen a boat, which is what road routing wants.
+ */
+export function moveCost(w: World, tile: number, road: boolean, fx?: Effects): number {
   const t = w.tiles[tile];
   const base = BIOME[t.biome].moveCost;
-  if (!Number.isFinite(base) || base > 100) return Infinity;
+  if (!Number.isFinite(base) || base > 100) return fx ? fx.sea : Infinity;
   let c = base;
   if (t.river) c *= 0.8;
   if (road) c *= 0.4;
-  return c;
+  return fx ? c / fx.move : c;
+}
+
+const landmassCache = new WeakMap<World, Int32Array>();
+
+/**
+ * Which contiguous body of walkable land each tile belongs to, water being -1.
+ *
+ * Computed once and never invalidated, because the coastline cannot move:
+ * climateCreep skips elevation band 0 and biomeFor never returns ocean or lake,
+ * so no tile in a running world crosses between land and water.
+ */
+export function landmassOf(w: World): Int32Array {
+  const hit = landmassCache.get(w);
+  if (hit) return hit;
+  const mass = new Int32Array(w.tiles.length).fill(-1);
+  const buf: number[] = [];
+  const stack: number[] = [];
+  let next = 0;
+  for (let i = 0; i < w.tiles.length; i++) {
+    if (mass[i] !== -1 || !BIOME[w.tiles[i].biome].passable) continue;
+    const id = next++;
+    stack.push(i);
+    mass[i] = id;
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      const c = neighbors(w.w, w.h, cur, buf);
+      for (let k = 0; k < c; k++) {
+        const nb = buf[k];
+        if (mass[nb] !== -1 || !BIOME[w.tiles[nb].biome].passable) continue;
+        mass[nb] = id;
+        stack.push(nb);
+      }
+    }
+  }
+  landmassCache.set(w, mass);
+  return mass;
 }
 
 export interface Field {
@@ -75,7 +116,7 @@ export interface Field {
  * and for "is that even reachable" checks. Deterministic: the heap breaks ties
  * on tile index, so equal-cost frontiers always expand in the same order.
  */
-export function costField(w: World, origin: number, budget: number): Field {
+export function costField(w: World, origin: number, budget: number, fx?: Effects): Field {
   const cost = new Map<number, number>();
   const from = new Map<number, number>();
   const heap = new Heap();
@@ -89,7 +130,7 @@ export function costField(w: World, origin: number, budget: number): Field {
     const c = neighbors(w.w, w.h, cur, buf);
     for (let k = 0; k < c; k++) {
       const nb = buf[k];
-      const step = moveCost(w, nb, w.roads.has(edgeKey(cur, nb)));
+      const step = moveCost(w, nb, w.roads.has(edgeKey(cur, nb)), fx);
       if (!Number.isFinite(step)) continue;
       const next = curCost + step;
       if (next > budget) continue;

@@ -1,12 +1,12 @@
-import type { World } from './../types.ts';
+import type { Settlement, World } from './../types.ts';
 import { NONE } from './../types.ts';
 import { chance, weightedIndex } from './../rng.ts';
 import { CULT } from './../culture.ts';
 import { emit, pName } from './../chronicle.ts';
-import { polityList, polityPop } from './../query.ts';
+import { effectsOf, polityList, polityPop } from './../query.ts';
 import { createNotable, polityResources, sortedIds } from './../factory.ts';
 import { CULTURE_AXES } from './../types.ts';
-import { availableTechs, effectsFor, TECH_BY_ID, techCost } from './../tech.ts';
+import { availableTechs, TECH_BY_ID, techCost } from './../tech.ts';
 import { INVENTOR_CHANCE, RESEARCH_PER_POP } from './../constants.ts';
 
 /**
@@ -21,7 +21,7 @@ export function phaseTech(w: World): void {
   for (const p of polityList(w)) {
     const known = w.techs.get(p.id);
     if (!known) continue;
-    const fx = effectsFor(known);
+    const fx = effectsOf(w, p.id);
     const pop = polityPop(w, p);
     p.research += pop * RESEARCH_PER_POP * (0.4 + 1.2 * p.culture[CULT.scholarly]) * fx.research;
 
@@ -32,9 +32,14 @@ export function phaseTech(w: World): void {
       } else if (p.research >= techCost(def.era)) {
         p.research -= techCost(def.era);
         p.researching = '';
+        // The realm's ledger, which is what research builds on next.
         known.add(def.id);
+        // The craft itself starts in one place — the biggest, where the
+        // workshops are — and has to travel from there like anything else.
+        const host = workshopOf(w, p.id);
+        if (host) host.techs.add(def.id);
         w.counters.techsEver++;
-        announce(w, p.id, def.id);
+        announce(w, p.id, def.id, host);
       }
       continue;
     }
@@ -55,21 +60,27 @@ export function phaseTech(w: World): void {
   }
 }
 
-function announce(w: World, polityId: number, techId: string): void {
-  const def = TECH_BY_ID.get(techId)!;
+/** The biggest place in the realm; that's where the workshops are. */
+function workshopOf(w: World, polityId: number): Settlement | undefined {
   const p = w.polities.get(polityId);
-  if (!p) return;
-  // Credit the biggest place in the realm; that's where the workshops are.
-  let host = NONE;
+  if (!p) return undefined;
+  let host: Settlement | undefined;
   let bestPop = -1;
   for (const sid of sortedIds(p.settlements)) {
     const s = w.settlements.get(sid);
     if (s && s.pop > bestPop) {
       bestPop = s.pop;
-      host = sid;
+      host = s;
     }
   }
-  const s = w.settlements.get(host);
+  return host;
+}
+
+function announce(w: World, polityId: number, techId: string, s: Settlement | undefined): void {
+  const def = TECH_BY_ID.get(techId)!;
+  const p = w.polities.get(polityId);
+  if (!p) return;
+  const host = s ? s.id : NONE;
   if (s && chance(w.rng, INVENTOR_CHANCE)) {
     const inv = createNotable(w, 'inventor', p.id, s.id, w.rng);
     emit(

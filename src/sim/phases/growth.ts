@@ -1,7 +1,7 @@
 import type { World } from './../types.ts';
 import { chance } from './../rng.ts';
 import { emit } from './../chronicle.ts';
-import { capacityOf, effectsOf, settlementList } from './../query.ts';
+import { capacityOf, effectsAt, settlementList } from './../query.ts';
 import { tierFor } from './../factory.ts';
 import {
   FAMINE_DEATH_RATE,
@@ -23,7 +23,7 @@ import {
  */
 export function phaseGrowth(w: World): void {
   for (const s of settlementList(w)) {
-    const fx = effectsOf(w, s.polity);
+    const fx = effectsAt(w, s);
     const K = capacityOf(w, s, fx);
     const yieldPerTick = K * FOOD_NEED * 1.12;
     const consumed = s.pop * FOOD_NEED;

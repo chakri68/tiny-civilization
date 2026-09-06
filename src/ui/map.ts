@@ -17,6 +17,8 @@ interface Toast {
   tile: number;
   born: number;
   severity: number;
+  /** Wrapped once on first draw — the text and the font never change after that. */
+  lines?: string[];
 }
 
 const CLASH_LIFE = 14000;
@@ -24,6 +26,11 @@ const MAX_CLASHES = 8;
 const TOAST_LIFE = 7000;
 const TOAST_FADE = 1600;
 const MAX_TOASTS = 4;
+/** Text wraps at this width, so a long chronicle line reads as a block, not a ribbon. */
+const TOAST_MAX_W = 240;
+const TOAST_PAD_X = 9;
+const TOAST_PAD_Y = 7;
+const TOAST_LINE = 15;
 
 interface Range {
   colMin: number;
@@ -34,6 +41,23 @@ interface Range {
 
 function rankOf(tier: string): number {
   return tier === 'city' ? 3 : tier === 'town' ? 2 : tier === 'village' ? 1 : 0;
+}
+
+/** Greedy word wrap in the ctx's current font. A word wider than the box overflows it. */
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(next).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 function roundRect(
@@ -547,37 +571,55 @@ export class MapView {
     ctx.textBaseline = 'middle';
 
     const rect = this.canvas.getBoundingClientRect();
-    const placed: { x: number; y: number; t: Toast }[] = [];
+    // Never wider than the viewport can hold, however narrow the panel gets.
+    const wrapAt = Math.max(80, Math.min(TOAST_MAX_W, rect.width - 40));
+    const placed: { bx: number; by: number; bw: number; bh: number; lines: string[]; t: Toast }[] =
+      [];
     for (const t of this.toasts) {
+      const lines = t.lines ?? (t.lines = wrapText(ctx, t.text, wrapAt));
+      let widest = 0;
+      for (const ln of lines) widest = Math.max(widest, ctx.measureText(ln).width);
+      const bw = Math.ceil(widest) + TOAST_PAD_X * 2;
+      const bh = lines.length * TOAST_LINE + TOAST_PAD_Y * 2;
       const c = hexCenter(w.w, t.tile, BASE_HEX);
+      const x = this.panX + (c.px + BASE_HEX) * this.zoom;
+      const y = this.panY + (c.py + BASE_HEX) * this.zoom;
       placed.push({
-        x: this.panX + (c.px + BASE_HEX) * this.zoom,
-        y: this.panY + (c.py + BASE_HEX) * this.zoom,
+        // Anchored beside its tile and centred on it, then kept inside the canvas.
+        bx: Math.max(6, Math.min(x + 10, rect.width - bw - 6)),
+        by: Math.max(6, Math.min(y - bh / 2, rect.height - bh - 6)),
+        bw,
+        bh,
+        lines,
         t,
       });
     }
     // Nudge apart anything that would overlap, oldest keeps its spot.
-    placed.sort((a, b) => a.y - b.y);
+    placed.sort((a, b) => a.by - b.by);
     for (let i = 1; i < placed.length; i++) {
-      if (placed[i].y - placed[i - 1].y < 26) placed[i].y = placed[i - 1].y + 26;
+      const floor = placed[i - 1].by + placed[i - 1].bh + 5;
+      if (placed[i].by < floor) placed[i].by = floor;
     }
+    // Boxes are tall enough now that a stack can push itself off the bottom.
+    const last = placed[placed.length - 1];
+    const overflow = last.by + last.bh + 6 - rect.height;
+    if (overflow > 0) for (const p of placed) p.by = Math.max(6, p.by - overflow);
 
-    for (const { x, y, t } of placed) {
+    for (const { bx, by, bw, bh, lines, t } of placed) {
       const age = now - t.born;
       const alpha = age > TOAST_LIFE - TOAST_FADE ? (TOAST_LIFE - age) / TOAST_FADE : 1;
-      const width = ctx.measureText(t.text).width + 18;
-      const bx = Math.max(6, Math.min(x + 10, rect.width - width - 6));
-      const by = Math.max(14, Math.min(y - 10, rect.height - 26));
 
       ctx.globalAlpha = alpha;
       ctx.fillStyle = 'rgba(2,2,2,0.9)';
-      roundRect(ctx, bx, by, width, 21, 5);
+      roundRect(ctx, bx, by, bw, bh, 5);
       ctx.fill();
       ctx.strokeStyle = t.severity >= 3 ? 'rgba(255,176,0,0.85)' : 'rgba(139,133,116,0.7)';
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.fillStyle = t.severity >= 3 ? '#ffcf5a' : '#ece7da';
-      ctx.fillText(t.text, bx + 9, by + 11);
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], bx + TOAST_PAD_X, by + TOAST_PAD_Y + TOAST_LINE / 2 + i * TOAST_LINE);
+      }
       ctx.globalAlpha = 1;
     }
     // Keep animating while any are still on screen.

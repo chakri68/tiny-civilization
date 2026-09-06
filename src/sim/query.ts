@@ -12,9 +12,23 @@ export function polityList(w: World): Polity[] {
   return Array.from(w.polities.values()).sort((a, b) => a.id - b.id);
 }
 
+/** A stable identity so the effects cache has something to key an empty set on. */
+const NO_TECHS: Set<string> = new Set();
+
+/** What a settlement itself knows how to do, which is not always what its realm knows. */
+export function effectsAt(w: World, s: Settlement): Effects {
+  void w;
+  return effectsFor(s.techs);
+}
+
+/**
+ * The realm's own reach, meaning its capital's. A court can only act on what sits
+ * in front of it: a craft stranded in a cut-off province does not run the state.
+ */
 export function effectsOf(w: World, polity: number): Effects {
-  const known = w.techs.get(polity);
-  return effectsFor(known ?? new Set<string>());
+  const p = w.polities.get(polity);
+  const seat = p ? w.settlements.get(p.capital) : undefined;
+  return effectsFor(seat ? seat.techs : NO_TECHS);
 }
 
 /** Carrying capacity: land quality times what the polity knows how to do with it. */

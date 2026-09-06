@@ -38,6 +38,8 @@ export const MIGRATION_SHARE_MIN = 0.1;
 export const MIGRATION_SHARE_MAX = 0.15;
 export const MIGRATION_MIN_POP = 190;
 export const SETTLE_RADIUS = 8;
+/** Extra settling reach once a people can put out to water at all. */
+export const SEA_SETTLE_BONUS = 4;
 /** Minimum hexes between two settlements. Sets the saturation density of the map. */
 export const SETTLE_SPACING = 3;
 export const PROPHET_MIN_POP = 250;
@@ -59,6 +61,14 @@ export const CULTURE_CONVERGE = 0.0018;
  */
 export const CULTURE_FOREIGN = 0.08;
 export const CULTURE_DRIFT = 0.0035;
+/**
+ * How much of a habit survives a sea crossing. Goods travel fine once there are
+ * hulls, but you meet foreign traders at the dock and not in the village, so
+ * character and faith cross water far worse than cargo does. Stacked with
+ * CULTURE_FOREIGN this leaves an overseas stranger essentially unmixable, which
+ * is why island peoples stay peculiar long after first contact.
+ */
+export const CULTURE_OVERSEAS = 0.12;
 export const ROAD_THRESHOLD = 260;
 export const ROAD_TRAFFIC_DECAY = 0.9985;
 
@@ -67,6 +77,17 @@ export const RESEARCH_PER_POP = 0.00042;
 export const TECH_COST_BASE = 220;
 export const TECH_COST_GROWTH = 2.15; // per era
 export const INVENTOR_CHANCE = 0.45;
+/**
+ * How much of a taken city's knowledge the conquerors keep, scaled by sqrt(pop):
+ * a camp yields nothing worth having, a great city gives up two or three trades.
+ */
+export const CONQUEST_TECH_RATE = 0.045;
+/**
+ * Ticks between diffusion passes. Each pass moves a craft one hop along the
+ * trade network, so this is how long knowledge takes to cross a realm: raise it
+ * and the provinces fall visibly behind the capital.
+ */
+export const TECH_DIFFUSION = TICKS_PER_YEAR;
 
 // --- religion ----------------------------------------------------------------
 export const PROPHET_CHANCE = 0.000018;

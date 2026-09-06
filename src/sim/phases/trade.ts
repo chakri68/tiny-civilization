@@ -1,17 +1,20 @@
 import type { Settlement, World } from './../types.ts';
 import { RESOURCES } from './../types.ts';
 import { edgeKey, hexDistance } from './../hex.ts';
+import { landmassOf } from './../path.ts';
 import { RESOURCE } from './../biomes.ts';
 import { converge, drift, CULT } from './../culture.ts';
-import { effectsOf, settlementList } from './../query.ts';
+import { effectsAt, settlementList } from './../query.ts';
 import {
   CULTURE_FOREIGN,
+  CULTURE_OVERSEAS,
   STOCK_DECAY,
   WEALTH_DECAY,
   CULTURE_CONVERGE,
   CULTURE_DRIFT,
   MAX_PARTNERS,
   PARTNER_REFRESH,
+  TECH_DIFFUSION,
   TRADE_RADIUS,
   TRADE_WEALTH,
 } from './../constants.ts';
@@ -25,9 +28,10 @@ import {
  */
 export function phaseTrade(w: World): void {
   const list = settlementList(w);
+  const mass = landmassOf(w);
 
   for (const s of list) {
-    const fx = effectsOf(w, s.polity);
+    const fx = effectsAt(w, s);
     const tile = w.tiles[s.tile];
     // Extraction scales with people, gently — a big town works the same tile harder.
     const output = Math.sqrt(s.pop) * 0.05 * fx.trade;
@@ -43,7 +47,7 @@ export function phaseTrade(w: World): void {
   }
 
   for (const s of list) {
-    const fxA = effectsOf(w, s.polity);
+    const fxA = effectsAt(w, s);
     for (let k = 0; k < s.partners.length; k++) {
       const pid = s.partners[k];
       if (pid <= s.id) continue; // each pair handled once, by the lower id
@@ -53,7 +57,7 @@ export function phaseTrade(w: World): void {
       const dist = s.partnerDist[k];
       const road = pathHasRoad(w, s, o);
       const complement = s.partnerComp[k];
-      const fxB = effectsOf(w, o.polity);
+      const fxB = effectsAt(w, o);
       const hostile = isHostile(w, s, o);
 
       const volume =
@@ -82,11 +86,15 @@ export function phaseTrade(w: World): void {
       // Convergence is strong inside a realm and weak across a border, and
       // mountains blunt it either way — which is what keeps neighbouring
       // peoples distinguishable a thousand years in.
+      // Geography, twice over: a climb keeps two valleys strange, and open water
+      // keeps two peoples stranger still.
       const relief = 1 / (1 + Math.abs(w.tiles[s.tile].elev - w.tiles[o.tile].elev) * 4);
+      const overseas = mass[s.tile] !== mass[o.tile];
       const rate =
         CULTURE_CONVERGE *
         (road ? 1.6 : 1) *
         (s.polity === o.polity ? 1 : CULTURE_FOREIGN) *
+        (overseas ? CULTURE_OVERSEAS : 1) *
         relief *
         Math.min(2, volume * 3);
       converge(s.culture, o.culture, rate);
@@ -96,14 +104,51 @@ export function phaseTrade(w: World): void {
       w.traffic.set(key, (w.traffic.get(key) ?? 0) + volume * (hostile ? 0 : 1));
     }
   }
+
+  diffuseTech(w, list);
+}
+
+/**
+ * Knowledge travels with the goods.
+ *
+ * Once a year a settlement picks up whatever its trading partners in the same
+ * realm know and it does not — one hop per pass, so a craft crosses a wide realm
+ * in a decade, arrives late in the provinces, and never arrives at all in a place
+ * that trades with nobody. Foreign partners are excluded: goods cross a border
+ * far more easily than a trade does.
+ */
+function diffuseTech(w: World, list: Settlement[]): void {
+  if (w.tick % TECH_DIFFUSION !== 0) return;
+  // Gathered first and applied after, so a craft cannot cross the whole realm in
+  // a single pass just because the settlement ids happen to run the right way.
+  const incoming: string[][] = [];
+  for (const s of list) {
+    const add: string[] = [];
+    for (const pid of s.partners) {
+      const o = w.settlements.get(pid);
+      if (!o || o.polity !== s.polity || o.techs.size === 0) continue;
+      for (const t of o.techs) if (!s.techs.has(t)) add.push(t);
+    }
+    incoming.push(add);
+  }
+  for (let i = 0; i < list.length; i++) {
+    const own = list[i].techs;
+    for (const t of incoming[i]) own.add(t);
+  }
 }
 
 function refreshPartners(w: World, s: Settlement, all: Settlement[]): void {
   const scored: { id: number; score: number; complement: number; dist: number }[] = [];
+  const mass = landmassOf(w);
+  const home = mass[s.tile];
+  const afloat = Number.isFinite(effectsAt(w, s).sea);
   for (const o of all) {
     if (o.id === s.id) continue;
     const d = hexDistance(w.w, s.tile, o.tile);
     if (d > TRADE_RADIUS) continue;
+    // Across water, somebody in the pair has to own a hull. Before that, an
+    // island trades with itself and nobody else, however close the mainland is.
+    if (mass[o.tile] !== home && !afloat && !Number.isFinite(effectsAt(w, o).sea)) continue;
     const complement = complementarity(w, s, o);
     const score = ((0.3 + complement) * Math.sqrt(o.pop)) / (1 + d * 0.3);
     scored.push({ id: o.id, score, complement, dist: d });

@@ -114,6 +114,12 @@ export interface Settlement {
   partnersTick: number;
   /** Set when a band found nowhere to go, so a full map stops re-searching. */
   noRoomUntil: number;
+  /**
+   * What this place actually knows how to do. A realm's discoveries land in the
+   * city that made them and travel outward along trade, so a settlement nobody
+   * trades with keeps only what its founders walked in with.
+   */
+  techs: Set<string>;
 }
 
 export interface Polity {

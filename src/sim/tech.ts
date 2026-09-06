@@ -21,6 +21,12 @@ export interface Effects {
   growth: number;
   stability: number;
   move: number;
+  /**
+   * What one tile of open water costs to cross. Infinity until somebody has
+   * built a hull that holds — water is not a thing you get gradually better at
+   * until then, you either put out or you don't.
+   */
+  sea: number;
 }
 
 export const BASE_EFFECTS: Effects = {
@@ -32,7 +38,28 @@ export const BASE_EFFECTS: Effects = {
   growth: 1,
   stability: 1,
   move: 1,
+  sea: Infinity,
 };
+
+/**
+ * Best hull wins, cheapest first. A dugout costs more than a mountain pass and
+ * gets you over a strait and no further; a ship that can fix its longitude makes
+ * open water ordinary.
+ */
+const SEA_COST: readonly (readonly [string, number])[] = [
+  ['navigation', 2.2],
+  ['caravel', 2.8],
+  ['compass', 3.4],
+  ['cartography', 4.2],
+  ['shipwrights', 5],
+  ['sailing', 6.5],
+  ['boats', 14],
+];
+
+function seaCostFor(known: Set<string>): number {
+  for (const [id, cost] of SEA_COST) if (known.has(id)) return cost;
+  return Infinity;
+}
 
 export interface TechDef {
   id: string;
@@ -185,6 +212,7 @@ export function aggregateEffects(known: Set<string>): Effects {
     if (fx.move) e.move += fx.move;
   }
   if (e.stability < 0.4) e.stability = 0.4;
+  e.sea = seaCostFor(known);
   return e;
 }
 

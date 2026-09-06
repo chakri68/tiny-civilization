@@ -15,7 +15,8 @@ import {
   WORLD_W,
 } from './constants.ts';
 
-export const WORLD_VERSION = 1;
+// 2: settlements carry their own tech sets.
+export const WORLD_VERSION = 2;
 
 function emptyWorld(seed: number, name: string, w: number, h: number, rng: RngState): World {
   return {
@@ -178,6 +179,7 @@ export function serializeWorld(w: World): WorldSave {
       partners: s.partners.slice(),
       partnerComp: s.partnerComp.slice(),
       partnerDist: s.partnerDist.slice(),
+      techs: Array.from(s.techs),
     })),
     polities: Array.from(w.polities.values()).map((p) => ({
       ...p,
@@ -246,8 +248,14 @@ export function deserializeWorld(save: WorldSave): World {
 
   // Insertion order is ascending id in a live world; restore it that way so
   // Map iteration order survives a save/load round trip.
-  const settlements = (save.settlements as Settlement[]).slice().sort((a, b) => a.id - b.id);
-  for (const s of settlements) world.settlements.set(s.id, { ...s, stock: { ...s.stock } });
+  type SettlementSave = Omit<Settlement, 'techs'> & { techs?: string[] };
+  const settlements = (save.settlements as SettlementSave[]).slice().sort((a, b) => a.id - b.id);
+  for (const s of settlements) {
+    // A version-1 save has no per-settlement techs; those worlds knew everything
+    // everywhere, so seeding from the realm keeps them behaving as they did.
+    const own = s.techs ?? Array.from(world.techs.get(s.polity) ?? []);
+    world.settlements.set(s.id, { ...s, stock: { ...s.stock }, techs: new Set(own) });
+  }
 
   type PolitySave = Omit<Polity, 'settlements' | 'wars' | 'grievance'> & {
     settlements: Id[];

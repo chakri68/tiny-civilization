@@ -4,11 +4,13 @@ import { chance, rand, randInt } from './../rng.ts';
 import { CULT, cultureDistance } from './../culture.ts';
 import { hexDistance, neighbors } from './../hex.ts';
 import { emit, pName } from './../chronicle.ts';
-import { dominantFaith, effectsOf } from './../query.ts';
+import { dominantFaith, effectsAt } from './../query.ts';
 import { createNotable, sortedIds, tierFor, transferSettlement, warKey } from './../factory.ts';
 import { BIOME } from './../biomes.ts';
+import { TECH_BY_ID } from './../tech.ts';
 import {
   BATTLE_CHANCE,
+  CONQUEST_TECH_RATE,
   GRIEVANCE_DECAY,
   PEACE_FATIGUE,
   SACK_POP_LOSS,
@@ -246,6 +248,7 @@ function sackAndTake(w: World, winner: Side, loser: Side): void {
   const loserPolity = loser.polity;
   transferSettlement(w, s, winner.polity);
   loserPolity.grievance.set(winner.polity.id, (loserPolity.grievance.get(winner.polity.id) ?? 0) + 1);
+  absorbTech(w, winner.polity, loserPolity, s);
   // A sacked camp is a footnote; a sacked city is the end of an age.
   const severity = wasTier === 'city' ? 3 : wasTier === 'town' ? 3 : wasTier === 'village' ? 2 : 1;
   const demoted = nowTier !== wasTier ? ` It was a ${wasTier} no longer.` : '';
@@ -259,8 +262,51 @@ function sackAndTake(w: World, winner: Side, loser: Side): void {
   );
 }
 
+/**
+ * What the winners carry home from a taken city.
+ *
+ * Craft does not travel with the army by itself — it travels with the workshops
+ * and the people who ran them, so the size of the place decides how much of it
+ * survives being sacked. Only the frontier of what the loser knew is reachable:
+ * you cannot take navigation off a people whose sailing you never learned, but
+ * taking their sailing this same day puts navigation within reach.
+ */
+function absorbTech(w: World, winner: Polity, loser: Polity, s: Settlement): void {
+  const theirs = w.techs.get(loser.id);
+  const ours = w.techs.get(winner.id);
+  if (!theirs || !ours) return;
+
+  let budget = Math.sqrt(s.pop) * CONQUEST_TECH_RATE;
+  const whole = Math.floor(budget);
+  budget = whole + (chance(w.rng, budget - whole) ? 1 : 0);
+  if (budget < 1) return;
+
+  const gained: string[] = [];
+  for (let i = 0; i < budget; i++) {
+    // Recomputed each time, so one sack can walk a step or two up their tree.
+    const frontier = Array.from(theirs)
+      .filter((id) => !ours.has(id))
+      .filter((id) => (TECH_BY_ID.get(id)?.prereqs ?? []).every((pre) => ours.has(pre)))
+      .sort();
+    if (frontier.length === 0) break;
+    const pick = frontier[randInt(w.rng, frontier.length)];
+    ours.add(pick);
+    gained.push(TECH_BY_ID.get(pick)?.name ?? pick);
+  }
+  if (gained.length === 0) return;
+
+  emit(
+    w,
+    'tech',
+    2,
+    [winner.id, loser.id, s.id],
+    s.tile,
+    `The craft of ${s.name} passed to ${pName(w, winner.id)} with the city — ${gained.join(', ')}.`,
+  );
+}
+
 function makeSide(w: World, p: Polity, s: Settlement, generals: Map<number, number>): Side {
-  const fx = effectsOf(w, p.id);
+  const fx = effectsAt(w, s);
   const general = generals.get(p.id) ?? NONE;
   const bonus = general === NONE ? 1 : 1 + (w.notables.get(general)?.skill ?? 0) * 0.35;
   const strength =

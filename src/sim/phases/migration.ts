@@ -1,11 +1,12 @@
 import type { Settlement, World } from './../types.ts';
+import type { Effects } from './../tech.ts';
 import { NONE } from './../types.ts';
 import { chance, rand, range } from './../rng.ts';
 import { BIOME } from './../biomes.ts';
 import { hexDistance, tilesWithin } from './../hex.ts';
 import { costField } from './../path.ts';
 import { emit, pName } from './../chronicle.ts';
-import { capacityOf, effectsOf, settlementList } from './../query.ts';
+import { capacityOf, effectsAt, settlementList } from './../query.ts';
 import { abandonSettlement, createNotable, createSettlement, spawnChildPolity } from './../factory.ts';
 import { CULT } from './../culture.ts';
 import {
@@ -14,6 +15,7 @@ import {
   MIGRATION_PRESSURE,
   MIGRATION_SHARE_MAX,
   MIGRATION_SHARE_MIN,
+  SEA_SETTLE_BONUS,
   SECESSION_BASE,
   SETTLE_RADIUS,
   SETTLE_SPACING,
@@ -34,7 +36,7 @@ export function phaseMigration(w: World): void {
     }
     if (s.pop < MIGRATION_MIN_POP) continue;
 
-    const fx = effectsOf(w, s.polity);
+    const fx = effectsAt(w, s);
     const K = capacityOf(w, s, fx);
     const pressure = s.pop / K;
     if (pressure < MIGRATION_PRESSURE) continue;
@@ -44,7 +46,7 @@ export function phaseMigration(w: World): void {
     if (!chance(w.rng, urge)) continue;
 
     if (w.tick < s.noRoomUntil) continue;
-    const target = bestSite(w, s);
+    const target = bestSite(w, s, fx);
     if (target < 0) {
       // The map fills up and then stays full. Without this, every crowded town
       // reruns a Dijkstra and a radius scan every few ticks, for ever, to be
@@ -72,7 +74,7 @@ export function phaseMigration(w: World): void {
 
     if (parent.settlements.size >= 2 && chance(w.rng, secedeChance)) {
       const child = spawnChildPolity(w, parent, s.culture, w.rng);
-      const nu = createSettlement(w, target, child.id, band);
+      const nu = createSettlement(w, target, child.id, band, s);
       nu.religion = s.religion;
       nu.religionSince = w.tick;
       const leader = createNotable(w, 'founder', child.id, nu.id, w.rng);
@@ -91,7 +93,7 @@ export function phaseMigration(w: World): void {
       continue;
     }
 
-    const nu = createSettlement(w, target, parent.id, band);
+    const nu = createSettlement(w, target, parent.id, band, s);
     nu.religion = s.religion;
     nu.religionSince = w.tick;
     let subjects = [nu.id, parent.id];
@@ -110,9 +112,12 @@ export function phaseMigration(w: World): void {
  * good land, close by, not right on top of the neighbours, not next to someone
  * we are at war with.
  */
-function bestSite(w: World, s: Settlement): number {
-  const budget = SETTLE_RADIUS * 2.2;
-  const field = costField(w, s.tile, budget);
+function bestSite(w: World, s: Settlement, fx: Effects): number {
+  // Hulls widen the horizon, and so does anything that moves people faster over
+  // land. There is no point scanning water for a people who cannot cross it.
+  const reach = Number.isFinite(fx.sea) ? SETTLE_RADIUS + SEA_SETTLE_BONUS : SETTLE_RADIUS;
+  const budget = reach * 2.2;
+  const field = costField(w, s.tile, budget, fx);
   const parent = w.polities.get(s.polity);
   let best = -1;
   let bestScore = 0.35; // a floor, so a band never settles somewhere hopeless
@@ -120,11 +125,11 @@ function bestSite(w: World, s: Settlement): number {
   // Tiles already spoken for, so the elbow-room check is a lookup not a scan.
   const occupied = new Set<number>();
   for (const other of w.settlements.values()) {
-    if (hexDistance(w.w, other.tile, s.tile) > SETTLE_RADIUS + SETTLE_SPACING) continue;
+    if (hexDistance(w.w, other.tile, s.tile) > reach + SETTLE_SPACING) continue;
     for (const near of tilesWithin(w.w, w.h, other.tile, SETTLE_SPACING - 1)) occupied.add(near);
   }
 
-  for (const tile of tilesWithin(w.w, w.h, s.tile, SETTLE_RADIUS)) {
+  for (const tile of tilesWithin(w.w, w.h, s.tile, reach)) {
     const t = w.tiles[tile];
     if (!BIOME[t.biome].passable || t.biome === 'lake' || t.biome === 'alpine') continue;
     if (t.settlement !== NONE) continue;
