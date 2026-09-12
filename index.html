@@ -127,6 +127,11 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
+    <!-- Amber Phosphor theme tokens — single source of truth. Render-blocking,
+         so the tokens are in effect before anything paints; the inline critical
+         CSS above covers the frames before this lands (and the case where it
+         never does). -->
+    <link rel="stylesheet" href="https://theme.chakri.me/tokens.css" />
   </head>
   <body class="booting">
     <div id="app"></div>
